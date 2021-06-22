@@ -1,0 +1,3 @@
+name: cloudx-aws
+runtime: nodejs
+description: '"AWS TypeScript project for CloudX Associate: AWS Developer"'
