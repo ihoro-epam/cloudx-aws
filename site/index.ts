@@ -6,12 +6,63 @@ import { join } from 'path';
 
 import * as policies from './policies';
 
-function createS3Bucket(): aws.s3.Bucket {
-    return  new aws.s3.Bucket('s3-website-bucket', {
-        website: {
-            indexDocument: 'index.html',
+const REPLICATION_REGION = 'eu-west-1';
+
+function createReplicationRole(): aws.iam.Role {
+    return new aws.iam.Role("replicationRole", {
+        assumeRolePolicy: {
+            Version: "2012-10-17",
+            Statement: [{
+                Action: "sts:AssumeRole",
+                Principal: {
+                    Service: "s3.amazonaws.com"
+                },
+                Effect: "Allow",
+                Sid: "",
+            }],
         },
     });
+}
+
+function createReplicationBucket(): aws.s3.Bucket {
+    const replicationProvider = new aws.Provider(REPLICATION_REGION, { region: REPLICATION_REGION });
+    return new aws.s3.Bucket('eu-west-1-replica', {
+        versioning: {
+            enabled: true,
+        },
+    }, { provider: replicationProvider });
+}
+
+function attachReplicationPolicy(source: aws.s3.Bucket, replicaBucket: aws.s3.Bucket, role: aws.iam.Role): void {
+    const replicationPolicy = new aws.iam.Policy("replicationPolicy", {
+        policy: policies.getS3ReplicationPolicy(source, replicaBucket),
+    });
+    new aws.iam.RolePolicyAttachment("replicationRolePolicyAttachment", {
+        role: role.name,
+        policyArn: replicationPolicy.arn,
+    });
+}
+
+function createS3Bucket(): aws.s3.Bucket {
+    const destination = createReplicationBucket();
+    const replicationRole = createReplicationRole();
+    const source = new aws.s3.Bucket('s3-website-bucket', {
+        website: { indexDocument: 'index.html' },
+        versioning: { enabled: true },
+        replicationConfiguration: {
+            role: replicationRole.arn,
+            rules: [{
+                status: "Enabled",
+                destination: {
+                    bucket: destination.arn,
+                    storageClass: "STANDARD",
+                },
+            }],
+        },
+    });
+    attachReplicationPolicy(source, destination, replicationRole);
+
+    return source;
 }
 
 function uploadFiles(siteDir: string, siteBucket: aws.s3.Bucket): void {
