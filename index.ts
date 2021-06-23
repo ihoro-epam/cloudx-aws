@@ -1,6 +1,7 @@
 import * as aws from "@pulumi/aws";
 
 import * as policies from './policies';
+import setupStaticWebPage from './site';
 
 function configureEC2() {
     const policy = new aws.iam.Policy("FullAccessPolicyEC2", {
@@ -117,3 +118,6 @@ createGroups();
 configureEC2();
 configureS3FullAccess();
 configureS3ReadAccess();
+const bucket = setupStaticWebPage();
+
+export const websiteUrl = bucket.websiteEndpoint;
